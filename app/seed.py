@@ -1,6 +1,7 @@
 """首次启动时初始化数据库：建表 + 内置管理员 + 种子业务数据。"""
 from datetime import datetime, timedelta
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from .auth import hash_password
@@ -9,11 +10,23 @@ from .database import Base, SessionLocal, engine
 from .models import Station, SwapRecord, User, Vehicle
 
 
+def _lightweight_migrations(db: Session) -> None:
+    """对老版本数据库补齐后续版本新增的列（SQLite 只能逐列 ALTER）。"""
+    columns = {row[1] for row in db.execute(text("PRAGMA table_info(swap_records)"))}
+    if columns and "client_soc_before" not in columns:
+        db.execute(text("ALTER TABLE swap_records ADD COLUMN client_soc_before FLOAT"))
+    if columns and "idempotency_key" not in columns:
+        db.execute(text("ALTER TABLE swap_records ADD COLUMN idempotency_key VARCHAR(64)"))
+        db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_swap_records_idempotency_key "
+                        "ON swap_records (idempotency_key)"))
+
+
 def init_db() -> None:
     """创建所有表并灌入种子数据（幂等：已存在则跳过）。"""
     Base.metadata.create_all(bind=engine)
     db: Session = SessionLocal()
     try:
+        _lightweight_migrations(db)
         _seed_admin(db)
         _seed_business(db)
         db.commit()

@@ -39,6 +39,28 @@ python run.py
 
 除 `login` 与 `health` 外，所有接口均需携带 `Authorization: Bearer <token>`。
 
+## 换电交易的一致性与幂等保证
+
+`POST /api/swaps` 是一条完整的交易链路，落库前统一校验、单事务提交：
+
+- **请求必须带调用方幂等标识 `request_id`**（终端生成，同一笔业务的重试必须复用）。
+  重复请求查回原交易（HTTP `200`，响应体 `replayed: true`）；同一编号挂不同
+  车辆/站点返回 `409` 且错误码为 `IDEMPOTENCY_KEY_CONFLICT`。幂等登记持久化在
+  数据库中，服务重启后重放仍可追溯。新建成功返回 `201`。
+- **落库前一致校验**：站点必须 `running`（离线/维护分别返回
+  `STATION_OFFLINE` / `STATION_MAINTENANCE`）；车辆不得为 `fault`/`charging`
+  （`VEHICLE_FAULT` / `VEHICLE_BUSY`）；终端上报的换前电量必须与车辆档案一致
+  （±1 个百分点，超出返回 `SOC_MISMATCH`）。记录中的 `soc_before` 永远以车辆
+  档案为准，终端上报值仅留痕在 `client_soc_before`。
+- **并发安全**：写事务以 `BEGIN IMMEDIATE` 串行化，库存扣减与车辆电量更新均为
+  条件 UPDATE（`battery_ready > 0` / CAS）。两个终端争用最后一块电池或同一
+  车辆时恰好一笔成功，另一笔返回 `NO_AVAILABLE_BATTERY` 等业务错误，库存不会
+  被重复消耗。
+- **原子性**：换电记录、车辆电量、站点库存、幂等登记在同一事务内提交，任一
+  步失败全部回滚。
+
+所有业务错误均返回结构化响应：`{"detail": "中文说明", "code": "ERROR_CODE"}`。
+
 ## 测试
 
 ```bash

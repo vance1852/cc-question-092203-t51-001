@@ -82,8 +82,11 @@ class VehicleOut(VehicleBase):
 
 # ---------- 换电记录 ----------
 class SwapCreate(BaseModel):
+    # 调用方（作业终端）生成的幂等标识：同一笔业务重试必须复用同一个值。
+    request_id: str = Field(..., min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_\-:#]+$")
     vehicle_id: int
     station_id: int
+    # 终端上报的换前电量，仅作留痕与比对；落库以车辆档案中的真实电量为准
     soc_before: float = Field(..., ge=0, le=100)
     soc_after: float = Field(100.0, ge=0, le=100)
 
@@ -95,8 +98,11 @@ class SwapOut(BaseModel):
     soc_before: float
     soc_after: float
     swapped_at: datetime
+    idempotency_key: Optional[str] = None
     vehicle_plate: Optional[str] = None
     station_name: Optional[str] = None
+    # True 表示本次响应来自幂等重放（返回的是已落库的原交易）
+    replayed: bool = False
 
     model_config = {"from_attributes": True}
 
