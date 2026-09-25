@@ -86,6 +86,8 @@ class SwapCreate(BaseModel):
     station_id: int
     soc_before: float = Field(..., ge=0, le=100)
     soc_after: float = Field(100.0, ge=0, le=100)
+    # 调用方提供的幂等标识：同一标识重复提交返回原交易；缺省时服务端生成
+    request_id: Optional[str] = Field(None, min_length=1, max_length=64)
 
 
 class SwapOut(BaseModel):
@@ -95,6 +97,7 @@ class SwapOut(BaseModel):
     soc_before: float
     soc_after: float
     swapped_at: datetime
+    request_id: Optional[str] = None
     vehicle_plate: Optional[str] = None
     station_name: Optional[str] = None
 

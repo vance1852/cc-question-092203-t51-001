@@ -1,6 +1,7 @@
 """首次启动时初始化数据库：建表 + 内置管理员 + 种子业务数据。"""
 from datetime import datetime, timedelta
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from .auth import hash_password
@@ -14,11 +15,23 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     db: Session = SessionLocal()
     try:
+        _migrate_swap_request_id(db)
         _seed_admin(db)
         _seed_business(db)
         db.commit()
     finally:
         db.close()
+
+
+def _migrate_swap_request_id(db: Session) -> None:
+    """为旧库补充 swap_records.request_id 列及唯一索引（新库由建表语句完成）。"""
+    columns = {row[1] for row in db.execute(text("PRAGMA table_info(swap_records)"))}
+    if "request_id" in columns:
+        return
+    db.execute(text("ALTER TABLE swap_records ADD COLUMN request_id VARCHAR(64)"))
+    db.execute(
+        text("CREATE UNIQUE INDEX IF NOT EXISTS uq_swap_records_request_id ON swap_records (request_id)")
+    )
 
 
 def _seed_admin(db: Session) -> None:

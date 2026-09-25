@@ -1,5 +1,5 @@
 """数据库连接与会话管理。"""
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from .config import DATABASE_URL
@@ -9,6 +9,15 @@ engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False},
 )
+
+
+@event.listens_for(engine, "connect")
+def _set_sqlite_pragmas(dbapi_connection, _connection_record):
+    """并发写入时等待锁释放，避免偶发 database is locked。"""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA busy_timeout = 5000")
+    cursor.close()
+
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

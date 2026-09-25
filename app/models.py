@@ -75,6 +75,8 @@ class SwapRecord(Base):
     soc_before = Column(Float, nullable=False, default=0.0)
     soc_after = Column(Float, nullable=False, default=100.0)
     swapped_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    # 调用方提供的幂等标识：重复提交返回原交易；持久化保证重启后仍可追溯
+    request_id = Column(String(64), unique=True, nullable=True)
 
     vehicle = relationship("Vehicle", back_populates="swaps")
     station = relationship("Station", back_populates="swaps")
